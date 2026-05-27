@@ -1,6 +1,7 @@
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import * as promise from 'mysql2/promise';
 
 @Injectable()
@@ -41,6 +42,27 @@ export class UsersService {
 
       throw error;
     }
+  }
+
+  async update(id: number, data: UpdateUserDto) {
+    try {
+      return await this.prisma.user.update({
+        where: { id },
+        data,
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException('Email already exists');
+      }
+
+      throw error;
+    }
+  }
+
+  async remove(id: number) {
+    return await this.prisma.user.delete({
+      where: { id },
+    });
   }
 
   private isUniqueConstraintError(error: unknown): error is { code: string } {
