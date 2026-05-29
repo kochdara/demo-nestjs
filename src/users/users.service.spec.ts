@@ -1,42 +1,25 @@
 import { ConflictException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { PrismaService } from '../database/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UsersService } from './users.service';
 
 describe('UsersService', () => {
   let service: UsersService;
-  let prisma: {
-    user: {
-      findMany: jest.Mock;
-      create: jest.Mock;
-      update: jest.Mock;
-      delete: jest.Mock;
-    };
+  let db: {
+    query: jest.Mock;
   };
 
   beforeEach(async () => {
-    prisma = {
-      user: {
-        findMany: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
-      },
+    db = {
+      query: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         {
-          provide: PrismaService,
-          useValue: prisma,
-        },
-        {
           provide: 'DATABASE_CONNECTION',
-          useValue: {
-            query: jest.fn(),
-          },
+          useValue: db,
         },
       ],
     }).compile();
@@ -56,10 +39,15 @@ describe('UsersService', () => {
       role: 'user',
     };
 
-    prisma.user.create.mockResolvedValue(data);
+    db.query
+      .mockResolvedValueOnce([{ insertId: 3 }])
+      .mockResolvedValueOnce([[{ id: 3, ...data }]]);
 
-    await expect(service.create(data)).resolves.toEqual(data);
-    expect(prisma.user.create).toHaveBeenCalledWith({ data });
+    await expect(service.create(data)).resolves.toEqual({ id: 3, ...data });
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO `user`'),
+      ['John', 'john@example.com', 'secret123', 'user'],
+    );
   });
 
   it('throws conflict when email already exists', async () => {
@@ -70,9 +58,11 @@ describe('UsersService', () => {
       role: 'user',
     };
 
-    prisma.user.create.mockRejectedValue({ code: 'P2002' });
+    db.query.mockRejectedValue({ code: 'ER_DUP_ENTRY' });
 
-    await expect(service.create(data)).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.create(data)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 
   it('updates a user', async () => {
@@ -82,21 +72,26 @@ describe('UsersService', () => {
       role: 'user',
     };
 
-    prisma.user.update.mockResolvedValue({ id: 3, ...data });
+    db.query
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([[{ id: 3, ...data }]]);
 
     await expect(service.update(3, data)).resolves.toEqual({ id: 3, ...data });
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: 3 },
-      data,
-    });
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE `user` SET'),
+      ['Koch-Makara', 'kochmakara@gmail.com', 'user', 3],
+    );
   });
 
   it('deletes a user', async () => {
-    prisma.user.delete.mockResolvedValue({ id: 3 });
+    db.query
+      .mockResolvedValueOnce([[{ id: 3 }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
 
     await expect(service.remove(3)).resolves.toEqual({ id: 3 });
-    expect(prisma.user.delete).toHaveBeenCalledWith({
-      where: { id: 3 },
-    });
+    expect(db.query).toHaveBeenCalledWith(
+      'DELETE FROM `user` WHERE `id` = ?',
+      [3],
+    );
   });
 });

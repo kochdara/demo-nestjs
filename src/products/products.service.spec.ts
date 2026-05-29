@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PrismaService } from '../database/prisma/prisma.service';
 import { ProductsService } from './products.service';
 
 describe('ProductsService', () => {
@@ -10,8 +9,10 @@ describe('ProductsService', () => {
       providers: [
         ProductsService,
         {
-          provide: PrismaService,
-          useValue: {},
+          provide: 'DATABASE_CONNECTION',
+          useValue: {
+            query: jest.fn(),
+          },
         },
       ],
     }).compile();
